@@ -1,4 +1,4 @@
-use shared::load_file;
+use shared::{debug_print, load_file};
 
 #[derive(Debug)]
 struct Mapping {
@@ -7,14 +7,22 @@ struct Mapping {
     maps: Vec<Map>,
 }
 impl Mapping {
-    fn map(&self, range: &Range) -> Range {
+    fn map(&self, range: &Range) -> Vec<Range> {
+        let mut ranges: Vec<Range> = vec![range.clone()];
+
         for map in &self.maps {
-            if let Some(r) = map.map(range) {
-                return r;
+            let original_ranges = ranges.clone();
+            ranges = Vec::new();
+            for range in original_ranges {
+                ranges.extend(map.map(&range));
+
+                if map.overlaps(&range) {
+                    return ranges;
+                }
             }
         }
 
-        range.to_owned()
+        ranges
     }
 }
 
@@ -24,18 +32,29 @@ struct Map {
     dest: Range,
 }
 impl Map {
-    fn map(&self, range: &Range) -> Option<Range> {
-        // ok this isn't enough and ranges need to be splitted to what is in mapped, before and after mapped range
-        // unfrotunatelly I am out of time
-        if self.src.overlap(range) {
-            let range = self.src.overlap_range(range);
-            Some(Range {
-                start: range.start - self.src.start + self.dest.start,
-                end: range.end - self.src.start + self.dest.start,
-            })
-        } else {
-            None
+    fn overlaps(&self, range: &Range) -> bool {
+        self.src.overlaps(range)
+    }
+
+    fn map(&self, range: &Range) -> Vec<Range> {
+        let mut ranges: Vec<Range> = Vec::new();
+
+        if let Some(before_range) = self.src.before_range(range) {
+            ranges.push(before_range);
         }
+
+        if let Some(overlap_range) = self.src.overlap_range(range) {
+            ranges.push(Range {
+                start: overlap_range.start - self.src.start + self.dest.start,
+                end: overlap_range.end - self.src.start + self.dest.start,
+            })
+        }
+
+        if let Some(after_range) = self.src.after_range(range) {
+            ranges.push(after_range);
+        }
+
+        ranges
     }
 }
 
@@ -45,20 +64,46 @@ struct Range {
     end: usize,
 }
 impl Range {
-    fn overlap(&self, other: &Range) -> bool {
+    fn overlaps(&self, other: &Range) -> bool {
         self.start <= other.end && other.start <= self.end
     }
 
-    fn overlap_range(&self, other: &Range) -> Range {
-        Range {
-            start: std::cmp::max(self.start, other.start),
-            end: std::cmp::min(self.end, other.end),
+    fn before_range(&self, other: &Range) -> Option<Range> {
+        if other.start < self.start {
+            Some(Range {
+                start: other.start,
+                end: std::cmp::min(self.start - 1, other.end),
+            })
+        } else {
+            None
+        }
+    }
+
+    fn overlap_range(&self, other: &Range) -> Option<Range> {
+        if self.start <= other.end && other.start <= self.end {
+            Some(Range {
+                start: std::cmp::max(self.start, other.start),
+                end: std::cmp::min(self.end, other.end),
+            })
+        } else {
+            None
+        }
+    }
+
+    fn after_range(&self, other: &Range) -> Option<Range> {
+        if self.end < other.end {
+            Some(Range {
+                start: std::cmp::max(self.end + 1, other.start),
+                end: other.end,
+            })
+        } else {
+            None
         }
     }
 }
 
 fn main() {
-    let data = load_file("example.txt");
+    let data = load_file("input.txt");
 
     let mut seeds: Vec<Range> = Vec::new();
     let mut mappings: Vec<Mapping> = Vec::new();
@@ -121,7 +166,7 @@ fn main() {
         }
     }
 
-    println!("Result one: {}", find_min_location(&seeds, &mappings));
+    println!("Result one: {}\n", find_min_location(&seeds, &mappings));
 
     let seed_ranges = seeds
         .clone()
@@ -138,14 +183,23 @@ fn find_min_location(seeds: &Vec<Range>, mappings: &Vec<Mapping>) -> usize {
     let mut locations: Vec<Range> = Vec::new();
     for seed in seeds {
         let mut mapping = Some(mappings.iter().find(|m| m.from == "seed").unwrap());
-        let mut value: Range = seed.clone();
+        let mut ranges: Vec<Range> = vec![seed.clone()];
+
+        debug_print!("{}: {:?}", mapping.unwrap().from, ranges);
 
         while mapping.is_some() {
-            value = mapping.unwrap().map(&mut value);
+            let original_ranges = ranges.clone();
+            ranges = Vec::new();
+            for range in &original_ranges {
+                ranges = mapping.unwrap().map(&range);
+            }
+            debug_print!("{}: {:?}", mapping.unwrap().to, ranges);
             mapping = mappings.iter().find(|m| m.from == mapping.unwrap().to);
         }
 
-        locations.push(value);
+        locations.extend(ranges);
     }
+
+    debug_print!("Locations: {:?}", locations);
     locations.iter().map(|r| r.start).min().unwrap()
 }
