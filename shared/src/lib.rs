@@ -17,3 +17,13 @@ pub fn load_file(filename: &str) -> String {
 
     data
 }
+
+#[macro_export]
+macro_rules! debug_print {
+    ($($arg:tt)*) => {
+        #[cfg(feature = "debug-output")]
+        {
+            println!($($arg)*);
+        }
+    };
+}

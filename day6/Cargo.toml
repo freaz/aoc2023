@@ -1,5 +1,5 @@
 [package]
-name = "shared"
+name = "day6"
 version = "0.1.0"
 edition = "2021"
 
@@ -9,3 +9,4 @@ edition = "2021"
 debug-output = []
 
 [dependencies]
+shared = { path = "../shared" }
